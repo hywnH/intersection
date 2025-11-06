@@ -1,16 +1,24 @@
 /*jslint bitwise: true, node: true */
 'use strict';
 
+const config = require('../../config');
 const express = require('express');
 const app = express();
 const http = require('http').Server(app);
-const io = require('socket.io')(http);
-const SAT = require('sat');
+const corsOrigins = Array.isArray(config.allowedOrigins) && config.allowedOrigins.length
+    ? config.allowedOrigins
+    : '*';
+const io = require('socket.io')(http, {
+    cors: {
+        origin: corsOrigins,
+        methods: ['GET', 'POST'],
+        credentials: true
+    }
+});
 
 const gameLogic = require('./game-logic');
 const loggingRepositry = require('./repositories/logging-repository');
 const chatRepository = require('./repositories/chat-repository');
-const config = require('../../config');
 const util = require('./lib/util');
 const mapUtils = require('./map/map');
 const {getPosition} = require("./lib/entityUtils");
@@ -24,7 +32,6 @@ const INIT_MASS_LOG = util.mathLog(config.defaultPlayerMass, config.slowBase);
 let leaderboard = [];
 let leaderboardChanged = false;
 
-const Vector = SAT.Vector;
 
 app.use(express.static(__dirname + '/../client'));
 
@@ -182,17 +189,6 @@ const addPlayer = (socket) => {
         }
     });
 
-    socket.on('1', function () {
-        // Fire food.
-        const minCellMass = config.defaultPlayerMass + config.fireFood;
-        for (let i = 0; i < currentPlayer.cells.length; i++) {
-            if (currentPlayer.cells[i].mass >= minCellMass) {
-                currentPlayer.changeCellMass(i, -config.fireFood);
-                map.massFood.addNew(currentPlayer, i, config.fireFood);
-            }
-        }
-    });
-
     socket.on('2', () => {
         currentPlayer.userSplit(config.limitSplit, config.defaultPlayerMass);
     });
@@ -218,54 +214,10 @@ const tickPlayer = (currentPlayer) => {
     }
 
     currentPlayer.move(config.slowBase, config.gameWidth, config.gameHeight, INIT_MASS_LOG);
-
-    const isEntityInsideCircle = (point, circle) => {
-        return SAT.pointInCircle(new Vector(point.x, point.y), circle);
-    };
-
-    const canEatMass = (cell, cellCircle, cellIndex, mass) => {
-        if (isEntityInsideCircle(mass, cellCircle)) {
-            if (mass.id === currentPlayer.id && mass.speed > 0 && cellIndex === mass.num)
-                return false;
-            if (cell.mass > mass.mass * 1.1)
-                return true;
-        }
-
-        return false;
-    };
-
-    const canEatVirus = (cell, cellCircle, virus) => {
-        return virus.mass < cell.mass && isEntityInsideCircle(virus, cellCircle)
-    }
-
-    const cellsToSplit = [];
-    for (let cellIndex = 0; cellIndex < currentPlayer.cells.length; cellIndex++) {
-        const currentCell = currentPlayer.cells[cellIndex];
-
-        const cellCircle = currentCell.toCircle();
-
-        const eatenFoodIndexes = util.getIndexes(map.food.data, food => isEntityInsideCircle(food, cellCircle));
-        const eatenMassIndexes = util.getIndexes(map.massFood.data, mass => canEatMass(currentCell, cellCircle, cellIndex, mass));
-        const eatenVirusIndexes = util.getIndexes(map.viruses.data, virus => canEatVirus(currentCell, cellCircle, virus));
-
-        if (eatenVirusIndexes.length > 0) {
-            cellsToSplit.push(cellIndex);
-            map.viruses.delete(eatenVirusIndexes)
-        }
-
-        let massGained = eatenMassIndexes.reduce((acc, index) => acc + map.massFood.data[index].mass, 0);
-
-        map.food.delete(eatenFoodIndexes);
-        map.massFood.remove(eatenMassIndexes);
-        massGained += (eatenFoodIndexes.length * config.foodMass);
-        currentPlayer.changeCellMass(cellIndex, massGained);
-    }
-    currentPlayer.virusSplit(cellsToSplit, config.limitSplit, config.defaultPlayerMass);
 };
 
 const tickGame = () => {
     map.players.data.forEach(tickPlayer);
-    map.massFood.move(config.gameWidth, config.gameHeight);
 
     map.players.handleCollisions(function (gotEaten, eater) {
         const cellGotEaten = map.players.getCell(gotEaten.playerIndex, gotEaten.cellIndex);
@@ -306,13 +258,12 @@ const gameloop = () => {
         map.players.shrinkCells(config.massLossRate, config.defaultPlayerMass, config.minMassLoss);
     }
 
-    map.balanceMass(config.foodMass, config.gameMass, config.maxFood, config.maxVirus);
 };
 
 const sendUpdates = () => {
     spectators.forEach(updateSpectator);
-    map.enumerateWhatPlayersSee(function (playerData, visiblePlayers, visibleFood, visibleMass, visibleViruses) {
-        sockets[playerData.id].emit('serverTellPlayerMove', playerData, visiblePlayers, visibleFood, visibleMass, visibleViruses);
+    map.enumerateWhatPlayersSee(function (playerData, visiblePlayers) {
+        sockets[playerData.id].emit('serverTellPlayerMove', playerData, visiblePlayers);
         if (leaderboardChanged) {
             sendLeaderboard(sockets[playerData.id]);
         }
@@ -337,7 +288,7 @@ const updateSpectator = (socketID) => {
         id: socketID,
         name: ''
     };
-    sockets[socketID].emit('serverTellPlayerMove', playerData, map.players.data, map.food.data, map.massFood.data, map.viruses.data);
+    sockets[socketID].emit('serverTellPlayerMove', playerData, map.players.data);
     if (leaderboardChanged) {
         sendLeaderboard(sockets[socketID]);
     }

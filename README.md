@@ -1,130 +1,57 @@
-Agar.io Clone
-=============
 
-This project was originally created by @huytd. I have since taken ownership of the repository to revive the project.
+# Intersection
 
-[![GitHub Stars](https://img.shields.io/github/stars/huytd/agar.io-clone.svg)](https://github.com/huytd/agar.io-clone/stargazers)
-[![GitHub Issues](https://img.shields.io/github/issues/huytd/agar.io-clone.svg)](https://github.com/huytd/agar.io-clone/issues)
-[![GitHub Wiki](https://img.shields.io/badge/project-wiki-ff69b4.svg)](https://github.com/huytd/agar.io-clone/wiki/Home)
-[![Live Demo](https://img.shields.io/badge/demo-online-green.svg)](#live-demos)
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/huytd/agar.io-clone?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+============
 
-A simple but powerful Agar.IO clone built with socket.IO and HTML5 canvas on top of NodeJS.
+모바일 웹 기반 인터랙티브 사운드·비주얼 설치 작품 **Intersection (Harmony · Dimension · Universe)**의 작업 저장소입니다.  
+각 참여자는 자신의 행성(planet)을 들고 우주 공간에 입장하고, 보이지 않는 중력 힌트를 따라 서로를 찾아 닿는 순간 화음이 쌓이며 흔적이 남습니다. 개인은 나만의 차원을 탐색하고, 글로벌 화면에서는 모든 궤적의 합주가 시각·청각화됩니다.
 
-![Image](screenshot.png)
+## Project Snapshot
 
-## Live Demos
-An updated live list of demos can be found on the [Live Demos wiki page](https://github.com/owenashurst/agar.io-clone/wiki/Live-Demos).
+- **Thesis**: 인간은 본능을 공유하며, 상호작용을 통해 서로의 차원을 단편적으로 이해할 수 있다.
+- **형태**: 스마트폰을 통한 개인 뷰 + 전시장 글로벌 디스플레이.
+- **핵심 메타포**: Harmony(동조) · Dimension(개별 세계) · Intersection(교차) · Gravity(끌림과 흔적).
 
-This is the most up to date version from master. Any merged pull requests will deploy to this URL automatically.
+## Experience
 
----
+- **Personal View**: 빈 우주와 나의 pulse sphere만 보이며, 주변 참여자는 중력 힌트(사운드·비주얼 왜곡)로 감지합니다. 근접하면 화음이 한 음씩 쌓이고 잔향 흔적이 남습니다.
+- **Global View**: 모든 행성과 흔적이 실시간으로 시각화되며 공간 전체의 합주가 들립니다. 흔적은 서서히 희미해지지만 완전히 사라지지는 않습니다.
+- **접근성 고려**: 청각 피드백의 진동 대체, 감광 민감 사용자 대응, 개인 식별 정보 비노출.
 
-## How to Play
-You can check out how to play on our [wiki](https://github.com/owenashurst/agar.io-clone/wiki/How-to-Play).
+## Core Interaction Rules
 
-#### Game Basics
-- Move your mouse around the screen to move your cell.
-- Eat food and other players in order to grow your character (food respawns every time a player eats it).
-- A player's **mass** is the number of food particles eaten.
-- **Objective**: Try to get as big as possible and eat other players.
+- 내 행성만 가시화되며 타인은 중력 힌트로만 존재감을 드러냅니다.
+- 거리 감소에 따라 오디오 변조와 표면 파동이 강해집니다.
+- 일정 거리 이하에서 `HarmonyEvent`가 발생하여 코드톤이 추가되고 흔적이 생성됩니다.
+- 흔적은 지수 감쇠 곡선을 따르며 전시 설정에 따라 잔존 시간을 조정할 수 있습니다.
 
-#### Gameplay Rules
-- Players who haven't eaten yet cannot be eaten as a sort of "grace" period. This invincibility fades once they gain mass.
-- Everytime a player joins the game, **3** food particles will spawn.
-- Everytime a food particle is eaten by a player, **1** new food particle will respawn.
-- The more food you eat, the slower you move to make the game fairer for all.
+## System Overview
 
----
+현재 코드는 Agar.io 오픈소스 기반을 리서치·프로토타이핑용으로 가져온 상태입니다. 구조를 재정비하며 Intersection 전용 기능을 단계적으로 이식합니다.
 
-## Latest Changes
-- Game logic is handled by the server
-- The client side is for rendering of the canvas and its items only.
-- Mobile optimisation.
-- Implementation of working viruses.
-- Display player name.
-- Now supporting chat. 
-- Type`-ping` in the chatbox to check your ping, as well as other commands!
+- **Client**: Three.js(WebGL), Tone.js(WebAudio)를 목표로 하는 모바일 웹앱.
+- **Server**: Node.js + WebSocket 상태 동기화, Redis 기반 pub/sub 검토 중.
+- **Infra**: Docker, Nginx, SSL 구성 예정. (CDN/전시장 네트워크는 전개 단계에서 확정)
 
----
+## Getting Started (WIP)
 
-## Installation
-You can simply click one of the buttons below to easily deploy this repo to Bluemix or Heroku:
+Intersection 전용 코드가 정리되는 동안 기본적인 Node.js 실행 흐름을 유지합니다.
 
-[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.png)](https://heroku.com/deploy)
-
-Or...
-
->You can check out a more detailed setup tutorial on our [wiki](https://github.com/owenashurst/agar.io-clone/wiki/Setup).
-
-#### Requirements
-To run / install this game, you'll need: 
-- NodeJS with NPM installed.
-- socket.IO.
-- Express.
-
-
-#### Downloading the dependencies
-After cloning the source code from Github, you need to run the following command to download all the dependencies (socket.IO, express, etc.):
-
-```
+```bash
 npm install
-```
-
-#### Running the Server
-After downloading all the dependencies, you can run the server with the following command:
-
-```
 npm start
 ```
 
-The game will then be accessible at `http://localhost:3000`. The default port is `3000`, however this can be changed in config. Further elaboration is available on our [wiki](https://github.com/owenashurst/agar.io-clone/wiki/Setup).
+기본 포트는 `http://localhost:3000`이며, 설정은 `config.js`에서 조정할 수 있습니다. 향후 개인/글로벌 뷰를 분리하는 신규 클라이언트가 추가될 예정입니다.
 
+## Roadmap
 
-### Running the Server with Docker
-If you have [Docker](https://www.docker.com/) installed, after cloning the repository you can run the following commands to start the server and make it acessible at `http://localhost:3000`:
+- **v0.1**: 개인/글로벌 뷰 뼈대, 중력 힌트, 접촉 이벤트의 최소 기능.
+- **v0.2**: 성운 흔적 스타일 확장, 하모니 보이싱 로직 고도화.
+- **v0.3**: Room 관리, 접근성 옵션 프리셋, 전시장 운영 툴킷.
+- **v1.0**: 전시장 배포 패키지 및 운영 가이드 완성.
 
-```
-docker build -t agarioclone_agar .
-docker run -it -p 3000:3000 agarioclone_agar
-```
+## 참고
 
----
-
-## FAQ
-1. **What is this game?**
-
-  This is a clone of the game [Agar.IO](http://agar.io/). Someone said that Agar.IO is a clone of an iPad game called Osmos, but we haven't tried it yet. (Cloneception? :P)
-  
-2. **Why would you make a clone of this game?**
-
-  Well, while the original game is still online, it is closed-source, and sometimes, it suffers from massive lag. That's why we want to make an open source version of it: for educational purposes, and to let the community add the features that they want, self-host it on their own servers, have fun with friends and more.
-  
-3. **Any plans on adding an online server to compete with Agar.IO or making money out of it?**
-
-  No. This game belongs to the open-source community, and we have no plans on making money out of it nor competing with anything. But you can of course create your own public server, let us know if you do so and we can add it to our Live Demos list!
-  
-4. **Can I deploy this game to my own server?**
-
-  Sure you can! That's what it's made for! ;)
-  
-5. **I don't like HTML5 canvas. Can I write my own game client with this server?**
-
-  Of course! As long as your client supports WebSockets, you can write your game client in any language/technology, even with Unity3D if you want (there is an open source library for Unity to communicate with WebSockets)!
-  
-6. **Can I use some code of this project on my own?**
-
-  Yes you can.
-
-## For Developers
- - [Game Architecture](https://github.com/owenashurst/agar.io-clone/wiki/Game-Architecture) to understand how the backend works.
- - If you want to start your own project, I recommend you use [this template](https://github.com/huytd/node-online-game-template). Happy developing!
- -
-
-## TODOs
- We have an explicit [TODO](https://github.com/owenashurst/agar.io-clone/wiki/Coming-Features) list for the all the features we aim to develop in the future. Feel free to contribute, we'll be more than grateful.
-
-## License
->You can check out the full license [here](https://github.com/owenashurst/agar.io-clone/blob/master/LICENSE).
-
-This project is licensed under the terms of the **MIT** license.
+- **레퍼런스 연구**: Kirschner & Tomasello (2010), Mehr et al. (2019), West–Eastern Divan Orchestra.
+- **작업 문서**: 프로젝트 전반의 세부 설계는 `README-02.md`에서 확인할 수 있습니다.

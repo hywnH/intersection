@@ -1,379 +1,497 @@
-var io = require('socket.io-client');
-var render = require('./render');
-var ChatClient = require('./chat-client');
-var Canvas = require('./canvas');
-var global = require('./global');
+const io = require('socket.io-client');
 
-var playerNameInput = document.getElementById('playerNameInput');
-var socket;
-
-var debug = function (args) {
-    if (console && console.log) {
-        console.log(args);
-    }
+const COLORS = {
+    background: '#01030a',
+    self: '#ffffff',
+    other: 'rgba(255, 255, 255, 0.45)',
+    otherStrong: 'rgba(255, 255, 255, 0.7)'
 };
 
-if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)) {
-    global.mobile = true;
+const state = {
+    mode: null,
+    socket: null,
+    animationId: null,
+    player: null,
+    playerId: null,
+    users: [],
+    target: { x: 0, y: 0 },
+    displayName: '',
+    playing: false,
+    population: 0,
+    game: { width: 5000, height: 5000 },
+    camera: { x: 0, y: 0 },
+    heartbeatId: null,
+    cellTrails: []
+};
+
+let canvas;
+let ctx;
+let landingView;
+let spaceView;
+let modeLabel;
+let nameLabel;
+let populationLabel;
+let statusMessage;
+let personalButton;
+let globalButton;
+let exitButton;
+let nameInput;
+
+function setupDomReferences() {
+    canvas = document.getElementById('spaceCanvas');
+    ctx = canvas.getContext('2d');
+    landingView = document.getElementById('landingView');
+    spaceView = document.getElementById('spaceView');
+    modeLabel = document.getElementById('modeLabel');
+    nameLabel = document.getElementById('nameLabel');
+    populationLabel = document.getElementById('populationLabel');
+    statusMessage = document.getElementById('statusMessage');
+    personalButton = document.getElementById('enterPersonal');
+    globalButton = document.getElementById('enterGlobal');
+    exitButton = document.getElementById('exitView');
+    nameInput = document.getElementById('displayNameInput');
 }
 
-function startGame(type) {
-    global.playerName = playerNameInput.value.replace(/(<([^>]+)>)/ig, '').substring(0, 25);
-    global.playerType = type;
-
-    global.screen.width = window.innerWidth;
-    global.screen.height = window.innerHeight;
-
-    document.getElementById('startMenuWrapper').style.maxHeight = '0px';
-    document.getElementById('gameAreaWrapper').style.opacity = 1;
-    if (!socket) {
-        socket = io({ query: "type=" + type });
-        setupSocket(socket);
-    }
-    if (!global.animLoopHandle)
-        animloop();
-    socket.emit('respawn');
-    window.chat.socket = socket;
-    window.chat.registerFunctions();
-    window.canvas.socket = socket;
-    global.socket = socket;
+function generateDisplayName(mode) {
+    const fallback = mode === 'personal'
+        ? `Explorer-${Math.floor(Math.random() * 900 + 100)}`
+        : 'Spectator';
+    const typed = (nameInput && nameInput.value || '').trim();
+    return typed.length > 0 ? typed : fallback;
 }
 
-// Checks if the nick chosen contains valid alphanumeric characters (and underscores).
-function validNick() {
-    var regex = /^\w*$/;
-    debug('Regex Test', regex.exec(playerNameInput.value));
-    return regex.exec(playerNameInput.value) !== null;
+function setStatus(text) {
+    if (!statusMessage) return;
+    statusMessage.textContent = text;
 }
 
-window.onload = function () {
+function resizeCanvas() {
+    if (!canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
 
-    var btn = document.getElementById('startButton'),
-        btnS = document.getElementById('spectateButton'),
-        nickErrorText = document.querySelector('#startMenu .input-error');
-
-    btnS.onclick = function () {
-        startGame('spectator');
-    };
-
-    btn.onclick = function () {
-
-        // Checks if the nick is valid.
-        if (validNick()) {
-            nickErrorText.style.opacity = 0;
-            startGame('player');
-        } else {
-            nickErrorText.style.opacity = 1;
-        }
-    };
-
-    var settingsMenu = document.getElementById('settingsButton');
-    var settings = document.getElementById('settings');
-
-    settingsMenu.onclick = function () {
-        if (settings.style.maxHeight == '300px') {
-            settings.style.maxHeight = '0px';
-        } else {
-            settings.style.maxHeight = '300px';
-        }
-    };
-
-    playerNameInput.addEventListener('keypress', function (e) {
-        var key = e.which || e.keyCode;
-
-        if (key === global.KEY_ENTER) {
-            if (validNick()) {
-                nickErrorText.style.opacity = 0;
-                startGame('player');
-            } else {
-                nickErrorText.style.opacity = 1;
-            }
-        }
-    });
-};
-
-// TODO: Break out into GameControls.
-
-var playerConfig = {
-    border: 6,
-    textColor: '#FFFFFF',
-    textBorder: '#000000',
-    textBorderSize: 3,
-    defaultSize: 30
-};
-
-var player = {
-    id: -1,
-    x: global.screen.width / 2,
-    y: global.screen.height / 2,
-    screenWidth: global.screen.width,
-    screenHeight: global.screen.height,
-    target: { x: global.screen.width / 2, y: global.screen.height / 2 }
-};
-global.player = player;
-
-var foods = [];
-var viruses = [];
-var fireFood = [];
-var users = [];
-var leaderboard = [];
-var target = { x: player.x, y: player.y };
-global.target = target;
-
-window.canvas = new Canvas();
-window.chat = new ChatClient();
-
-var visibleBorderSetting = document.getElementById('visBord');
-visibleBorderSetting.onchange = settings.toggleBorder;
-
-var showMassSetting = document.getElementById('showMass');
-showMassSetting.onchange = settings.toggleMass;
-
-var continuitySetting = document.getElementById('continuity');
-continuitySetting.onchange = settings.toggleContinuity;
-
-var roundFoodSetting = document.getElementById('roundFood');
-roundFoodSetting.onchange = settings.toggleRoundFood;
-
-var c = window.canvas.cv;
-var graph = c.getContext('2d');
-
-$("#feed").click(function () {
-    socket.emit('1');
-    window.canvas.reenviar = false;
-});
-
-$("#split").click(function () {
-    socket.emit('2');
-    window.canvas.reenviar = false;
-});
-
-function handleDisconnect() {
-    socket.close();
-    if (!global.kicked) { // We have a more specific error message 
-        render.drawErrorMessage('Disconnected!', graph, global.screen);
+function handleResize() {
+    resizeCanvas();
+    if (state.socket && state.socket.connected && state.mode === 'personal') {
+        state.socket.emit('windowResized', {
+            screenWidth: canvas.width,
+            screenHeight: canvas.height
+        });
     }
 }
 
-// socket stuff.
-function setupSocket(socket) {
-    // Handle ping.
-    socket.on('pongcheck', function () {
-        var latency = Date.now() - global.startPingTime;
-        debug('Latency: ' + latency + 'ms');
-        window.chat.addSystemLine('Ping: ' + latency + 'ms');
-    });
-
-    // Handle error.
-    socket.on('connect_error', handleDisconnect);
-    socket.on('disconnect', handleDisconnect);
-
-    // Handle connection.
-    socket.on('welcome', function (playerSettings, gameSizes) {
-        player = playerSettings;
-        player.name = global.playerName;
-        player.screenWidth = global.screen.width;
-        player.screenHeight = global.screen.height;
-        player.target = window.canvas.target;
-        global.player = player;
-        window.chat.player = player;
-        socket.emit('gotit', player);
-        global.gameStart = true;
-        window.chat.addSystemLine('Connected to the game!');
-        window.chat.addSystemLine('Type <b>-help</b> for a list of commands.');
-        if (global.mobile) {
-            document.getElementById('gameAreaWrapper').removeChild(document.getElementById('chatbox'));
-        }
-        c.focus();
-        global.game.width = gameSizes.width;
-        global.game.height = gameSizes.height;
-        resize();
-    });
-
-    socket.on('playerDied', (data) => {
-        const player = isUnnamedCell(data.playerEatenName) ? 'An unnamed cell' : data.playerEatenName;
-        //const killer = isUnnamedCell(data.playerWhoAtePlayerName) ? 'An unnamed cell' : data.playerWhoAtePlayerName;
-
-        //window.chat.addSystemLine('{GAME} - <b>' + (player) + '</b> was eaten by <b>' + (killer) + '</b>');
-        window.chat.addSystemLine('{GAME} - <b>' + (player) + '</b> was eaten');
-    });
-
-    socket.on('playerDisconnect', (data) => {
-        window.chat.addSystemLine('{GAME} - <b>' + (isUnnamedCell(data.name) ? 'An unnamed cell' : data.name) + '</b> disconnected.');
-    });
-
-    socket.on('playerJoin', (data) => {
-        window.chat.addSystemLine('{GAME} - <b>' + (isUnnamedCell(data.name) ? 'An unnamed cell' : data.name) + '</b> joined.');
-    });
-
-    socket.on('leaderboard', (data) => {
-        leaderboard = data.leaderboard;
-        var status = '<span class="title">Leaderboard</span>';
-        for (var i = 0; i < leaderboard.length; i++) {
-            status += '<br />';
-            if (leaderboard[i].id == player.id) {
-                if (leaderboard[i].name.length !== 0)
-                    status += '<span class="me">' + (i + 1) + '. ' + leaderboard[i].name + "</span>";
-                else
-                    status += '<span class="me">' + (i + 1) + ". An unnamed cell</span>";
-            } else {
-                if (leaderboard[i].name.length !== 0)
-                    status += (i + 1) + '. ' + leaderboard[i].name;
-                else
-                    status += (i + 1) + '. An unnamed cell';
-            }
-        }
-        //status += '<br />Players: ' + data.players;
-        document.getElementById('status').innerHTML = status;
-    });
-
-    socket.on('serverMSG', function (data) {
-        window.chat.addSystemLine(data);
-    });
-
-    // Chat.
-    socket.on('serverSendPlayerChat', function (data) {
-        window.chat.addChatLine(data.sender, data.message, false);
-    });
-
-    // Handle movement.
-    socket.on('serverTellPlayerMove', function (playerData, userData, foodsList, massList, virusList) {
-        if (global.playerType == 'player') {
-            player.x = playerData.x;
-            player.y = playerData.y;
-            player.hue = playerData.hue;
-            player.massTotal = playerData.massTotal;
-            player.cells = playerData.cells;
-        }
-        users = userData;
-        foods = foodsList;
-        viruses = virusList;
-        fireFood = massList;
-    });
-
-    // Death.
-    socket.on('RIP', function () {
-        global.gameStart = false;
-        render.drawErrorMessage('You died!', graph, global.screen);
-        window.setTimeout(() => {
-            document.getElementById('gameAreaWrapper').style.opacity = 0;
-            document.getElementById('startMenuWrapper').style.maxHeight = '1000px';
-            if (global.animLoopHandle) {
-                window.cancelAnimationFrame(global.animLoopHandle);
-                global.animLoopHandle = undefined;
-            }
-        }, 2500);
-    });
-
-    socket.on('kick', function (reason) {
-        global.gameStart = false;
-        global.kicked = true;
-        if (reason !== '') {
-            render.drawErrorMessage('You were kicked for: ' + reason, graph, global.screen);
-        }
-        else {
-            render.drawErrorMessage('You were kicked!', graph, global.screen);
-        }
-        socket.close();
-    });
+function resetTarget() {
+    state.target.x = 0;
+    state.target.y = 0;
 }
 
-const isUnnamedCell = (name) => name.length < 1;
+function handlePointerMove(evt) {
+    if (state.mode !== 'personal' || !state.playing) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = evt.clientX !== undefined ? evt.clientX : (evt.touches && evt.touches[0].clientX);
+    const clientY = evt.clientY !== undefined ? evt.clientY : (evt.touches && evt.touches[0].clientY);
+    if (clientX === undefined || clientY === undefined) return;
 
-const getPosition = (entity, player, screen) => {
-    return {
-        x: entity.x - player.x + screen.width / 2,
-        y: entity.y - player.y + screen.height / 2
+    state.target.x = clientX - rect.left - canvas.width / 2;
+    state.target.y = clientY - rect.top - canvas.height / 2;
+
+    if (evt.touches) {
+        evt.preventDefault();
     }
 }
 
-window.requestAnimFrame = (function () {
-    return window.requestAnimationFrame ||
-        window.webkitRequestAnimationFrame ||
-        window.mozRequestAnimationFrame ||
-        window.msRequestAnimationFrame ||
-        function (callback) {
-            window.setTimeout(callback, 1000 / 60);
+function teardownSocket() {
+    stopHeartbeat();
+    if (state.animationId) {
+        cancelAnimationFrame(state.animationId);
+        state.animationId = null;
+    }
+    if (state.socket) {
+        if (typeof state.socket.removeAllListeners === 'function') {
+            state.socket.removeAllListeners();
+        }
+        state.socket.disconnect();
+        state.socket = null;
+    }
+    state.playing = false;
+    state.player = null;
+    state.playerId = null;
+    state.users = [];
+    state.cellTrails = [];
+}
+
+function updateHud() {
+    if (modeLabel) {
+        modeLabel.textContent = state.mode === 'personal' ? 'Personal' : 'Global';
+    }
+    if (nameLabel) {
+        nameLabel.textContent = state.displayName || '-';
+    }
+    if (populationLabel) {
+        populationLabel.textContent = String(state.population || 0);
+    }
+}
+
+function ensureView(active) {
+    if (!landingView || !spaceView) return;
+    if (active) {
+        landingView.classList.add('hidden');
+        spaceView.classList.remove('hidden');
+    } else {
+        spaceView.classList.add('hidden');
+        landingView.classList.remove('hidden');
+    }
+}
+
+function startMode(mode) {
+    teardownSocket();
+    state.mode = mode;
+    state.displayName = generateDisplayName(mode);
+    resetTarget();
+    ensureView(true);
+    updateHud();
+    resizeCanvas();
+    connectSocket();
+}
+
+function stopMode() {
+    teardownSocket();
+    ensureView(false);
+    setStatus('대기 중입니다.');
+}
+
+function connectSocket() {
+    const queryType = state.mode === 'personal' ? 'player' : 'spectator';
+    const socket = io({ query: `type=${queryType}` });
+    state.socket = socket;
+    setStatus('Connecting…');
+
+    socket.on('connect', () => {
+        setStatus('Connected. Initialising…');
+        if (state.mode === 'personal') {
+            socket.emit('respawn');
+        }
+    });
+
+    socket.on('welcome', (playerSettings = {}, gameSizes = {}) => {
+        state.game = {
+            width: Number(gameSizes.width) || state.game.width,
+            height: Number(gameSizes.height) || state.game.height
         };
-})();
-
-window.cancelAnimFrame = (function (handle) {
-    return window.cancelAnimationFrame ||
-        window.mozCancelAnimationFrame;
-})();
-
-function animloop() {
-    global.animLoopHandle = window.requestAnimFrame(animloop);
-    gameLoop();
-}
-
-function gameLoop() {
-    if (global.gameStart) {
-        graph.fillStyle = global.backgroundColor;
-        graph.fillRect(0, 0, global.screen.width, global.screen.height);
-
-        render.drawGrid(global, player, global.screen, graph);
-        foods.forEach(food => {
-            let position = getPosition(food, player, global.screen);
-            render.drawFood(position, food, graph);
-        });
-        fireFood.forEach(fireFood => {
-            let position = getPosition(fireFood, player, global.screen);
-            render.drawFireFood(position, fireFood, playerConfig, graph);
-        });
-        viruses.forEach(virus => {
-            let position = getPosition(virus, player, global.screen);
-            render.drawVirus(position, virus, graph);
-        });
-
-
-        let borders = { // Position of the borders on the screen
-            left: global.screen.width / 2 - player.x,
-            right: global.screen.width / 2 + global.game.width - player.x,
-            top: global.screen.height / 2 - player.y,
-            bottom: global.screen.height / 2 + global.game.height - player.y
+        state.player = Object.assign({}, playerSettings);
+        if (typeof state.player.x !== 'number') {
+            state.player.x = state.game.width / 2;
         }
-        if (global.borderDraw) {
-            render.drawBorder(borders, graph);
+        if (typeof state.player.y !== 'number') {
+            state.player.y = state.game.height / 2;
+        }
+        state.player.cells = Array.isArray(state.player.cells) ? state.player.cells : [];
+        state.playerId = playerSettings.id || state.playerId || socket.id;
+        state.camera = {
+            x: playerSettings.x || state.game.width / 2,
+            y: playerSettings.y || state.game.height / 2
+        };
+        state.cellTrails = [];
+
+        const handshakePayload = Object.assign({}, playerSettings, {
+            name: state.displayName,
+            screenWidth: canvas.width,
+            screenHeight: canvas.height,
+            target: state.target
+        });
+
+        if (state.mode !== 'personal') {
+            delete handshakePayload.target;
+            delete handshakePayload.screenWidth;
+            delete handshakePayload.screenHeight;
         }
 
-        var cellsToDraw = [];
-        for (var i = 0; i < users.length; i++) {
-            let color = 'hsl(' + users[i].hue + ', 100%, 50%)';
-            let borderColor = 'hsl(' + users[i].hue + ', 100%, 45%)';
-            for (var j = 0; j < users[i].cells.length; j++) {
-                cellsToDraw.push({
-                    color: color,
-                    borderColor: borderColor,
-                    mass: users[i].cells[j].mass,
-                    name: users[i].name,
-                    radius: users[i].cells[j].radius,
-                    x: users[i].cells[j].x - player.x + global.screen.width / 2,
-                    y: users[i].cells[j].y - player.y + global.screen.height / 2
-                });
+        socket.emit('gotit', handshakePayload);
+
+        if (state.mode === 'personal') {
+            socket.emit('windowResized', {
+                screenWidth: canvas.width,
+                screenHeight: canvas.height
+            });
+        }
+
+        state.playing = true;
+        setStatus('Connected');
+        startAnimationLoop();
+        startHeartbeat();
+    });
+
+    socket.on('serverTellPlayerMove', (playerData, userData = []) => {
+        state.users = Array.isArray(userData) ? userData : [];
+        state.population = state.users.length;
+        if (populationLabel) {
+            populationLabel.textContent = String(state.population);
+        }
+        if (state.mode === 'personal') {
+            state.player = Object.assign({}, state.player, playerData);
+            state.player.cells = Array.isArray(state.player.cells) ? state.player.cells : [];
+        } else {
+            state.camera = {
+                x: playerData.x || state.game.width / 2,
+                y: playerData.y || state.game.height / 2
+            };
+        }
+    });
+
+    socket.on('leaderboard', (data = {}) => {
+        if (data.players !== undefined) {
+            state.population = data.players;
+            if (populationLabel) {
+                populationLabel.textContent = String(state.population);
             }
         }
-        cellsToDraw.sort(function (obj1, obj2) {
-            return obj1.mass - obj2.mass;
+    });
+
+    socket.on('RIP', () => {
+        state.playing = false;
+        setStatus('흡수되었습니다. 나가기를 눌러 재접속하세요.');
+    });
+
+    socket.on('kick', (reason = '') => {
+        state.playing = false;
+        setStatus(reason ? `접속이 종료되었습니다: ${reason}` : '접속이 종료되었습니다.');
+    });
+
+    socket.on('disconnect', () => {
+        if (state.playing) {
+            setStatus('연결이 끊어졌습니다.');
+        }
+        state.playing = false;
+        stopHeartbeat();
+    });
+
+    socket.on('connect_error', (error) => {
+        setStatus(`연결 실패: ${error.message}`);
+    });
+}
+
+function startHeartbeat() {
+    stopHeartbeat();
+    state.heartbeatId = setInterval(() => {
+        if (!state.playing || !state.socket || !state.socket.connected) return;
+        if (state.mode !== 'personal') return;
+        state.socket.emit('0', state.target);
+    }, 500);
+}
+
+function stopHeartbeat() {
+    if (state.heartbeatId) {
+        clearInterval(state.heartbeatId);
+        state.heartbeatId = null;
+    }
+}
+function startAnimationLoop() {
+    if (state.animationId) {
+        cancelAnimationFrame(state.animationId);
+    }
+    const step = () => {
+        drawFrame();
+        state.animationId = requestAnimationFrame(step);
+    };
+    step();
+}
+
+function drawFrame() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = COLORS.background;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (!state.playing) return;
+
+    if (state.mode === 'personal' && state.player) {
+        drawPersonalView();
+    } else if (state.mode === 'global') {
+        drawGlobalView();
+    }
+}
+
+function drawPersonalView() {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const playerCells = (state.player && state.player.cells) || [];
+
+    recordCellTrails(playerCells);
+    const glowTargets = detectCollisionGlow(playerCells);
+
+    if (playerCells.length === 0) {
+        ctx.fillStyle = COLORS.self;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 10, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+    }
+
+    playerCells.forEach((cell, index) => {
+        const radius = Math.max(Math.min(cell.radius, 48), 6);
+        const screenX = centerX + (cell.x - state.player.x);
+        const screenY = centerY + (cell.y - state.player.y);
+
+        drawCellTrail(radius, index, centerX, centerY);
+        if (glowTargets.has(index)) {
+            drawCollisionGlow(screenX, screenY, radius);
+        }
+        drawPlayerCell(screenX, screenY, radius);
+    });
+}
+
+function detectCollisionGlow(playerCells) {
+    const glowIndexes = new Set();
+    if (!Array.isArray(playerCells) || playerCells.length === 0) return glowIndexes;
+
+    state.users.forEach((user) => {
+        if (!user || user.id === state.playerId || !Array.isArray(user.cells)) return;
+        user.cells.forEach((otherCell) => {
+            playerCells.forEach((cell, index) => {
+                if (!cell) return;
+                const distance = Math.hypot(otherCell.x - cell.x, otherCell.y - cell.y);
+                if (distance <= (otherCell.radius + cell.radius)) {
+                    glowIndexes.add(index);
+                }
+            });
         });
-        render.drawCells(cellsToDraw, playerConfig, global.toggleMassState, borders, graph);
+    });
 
-        socket.emit('0', window.canvas.target); // playerSendTarget "Heartbeat".
-    }
+    return glowIndexes;
 }
 
-window.addEventListener('resize', resize);
-
-function resize() {
-    if (!socket) return;
-
-    player.screenWidth = c.width = global.screen.width = global.playerType == 'player' ? window.innerWidth : global.game.width;
-    player.screenHeight = c.height = global.screen.height = global.playerType == 'player' ? window.innerHeight : global.game.height;
-
-    if (global.playerType == 'spectator') {
-        player.x = global.game.width / 2;
-        player.y = global.game.height / 2;
+function recordCellTrails(playerCells) {
+    if (!Array.isArray(playerCells) || playerCells.length === 0) {
+        state.cellTrails = [];
+        return;
     }
 
-    socket.emit('windowResized', { screenWidth: global.screen.width, screenHeight: global.screen.height });
+    if (!Array.isArray(state.cellTrails)) {
+        state.cellTrails = [];
+    }
+    if (state.cellTrails.length > playerCells.length) {
+        state.cellTrails.length = playerCells.length;
+    }
+
+    playerCells.forEach((cell, index) => {
+        let trail = state.cellTrails[index];
+        if (!trail) {
+            trail = [];
+            state.cellTrails[index] = trail;
+        }
+        const last = trail[trail.length - 1];
+        const moved = !last || Math.hypot(cell.x - last.x, cell.y - last.y) > 1;
+        if (moved) {
+            trail.push({ x: cell.x, y: cell.y });
+            if (trail.length > 15) {
+                trail.shift();
+            }
+        } else if (trail.length > 4) {
+            trail.shift();
+        }
+    });
 }
+
+function drawCellTrail(radius, trailIndex, centerX, centerY) {
+    const trail = state.cellTrails[trailIndex];
+    if (!trail || trail.length < 2) return;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let i = trail.length - 1; i > 0; i--) {
+        const current = trail[i];
+        const previous = trail[i - 1];
+        const startX = centerX + (current.x - state.player.x);
+        const startY = centerY + (current.y - state.player.y);
+        const endX = centerX + (previous.x - state.player.x);
+        const endY = centerY + (previous.y - state.player.y);
+        const strength = i / trail.length;
+        ctx.strokeStyle = `rgba(120, 180, 255, ${0.15 + strength * 0.35})`;
+        ctx.lineWidth = Math.max(radius * 0.25 * strength, 1.5);
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function drawCollisionGlow(x, y, radius) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const outerRadius = radius + 24;
+    const gradient = ctx.createRadialGradient(x, y, radius * 0.6, x, y, outerRadius);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.0)');
+    gradient.addColorStop(1, 'rgba(255, 220, 120, 0.55)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, outerRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawPlayerCell(x, y, radius) {
+    ctx.save();
+    const gradient = ctx.createRadialGradient(x, y, radius * 0.2, x, y, radius);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+    gradient.addColorStop(1, COLORS.self);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = Math.max(radius * 0.12, 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawGlobalView() {
+    const scale = Math.min(
+        canvas.width / state.game.width,
+        canvas.height / state.game.height
+    );
+    const offsetX = (canvas.width - state.game.width * scale) / 2;
+    const offsetY = (canvas.height - state.game.height * scale) / 2;
+
+    ctx.strokeStyle = COLORS.otherStrong;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(offsetX, offsetY, state.game.width * scale, state.game.height * scale);
+
+    ctx.fillStyle = COLORS.other;
+    state.users.forEach((user) => {
+        if (!user || !Array.isArray(user.cells)) return;
+        user.cells.forEach((cell) => {
+            const radius = Math.max(cell.radius * scale, 2);
+            ctx.beginPath();
+            ctx.arc(offsetX + cell.x * scale, offsetY + cell.y * scale, radius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    });
+}
+
+function bindEvents() {
+    if (personalButton) {
+        personalButton.addEventListener('click', () => startMode('personal'));
+    }
+    if (globalButton) {
+        globalButton.addEventListener('click', () => startMode('global'));
+    }
+    if (exitButton) {
+        exitButton.addEventListener('click', stopMode);
+    }
+    if (canvas) {
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+        canvas.addEventListener('mouseleave', resetTarget);
+        canvas.addEventListener('touchend', resetTarget);
+    }
+    window.addEventListener('resize', handleResize);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    setupDomReferences();
+    resizeCanvas();
+    bindEvents();
+    setStatus('대기 중입니다.');
+});

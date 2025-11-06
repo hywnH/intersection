@@ -1,64 +1,54 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
-    <!-- Meta Properties -->
     <meta charset="UTF-8">
-    <title>Open Agar</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-    <!-- CSS -->
-    <link rel="stylesheet" href="css/main.css" />
-    <!-- Audio -->
-    <audio id="split_cell" src="audio/split.mp3"></audio>
-    <audio id="spawn_cell" src="audio/spawn.mp3"></audio>
+    <title>Intersection Prototype</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-    <div id="gameAreaWrapper">
-        <div id="status"><span class="title">Leaderboard</span></div>
-        <div class="chatbox" id="chatbox">
-            <ul id="chatList" class="chat-list"></ul>
-            <input id="chatInput" type="text" class="chat-input" placeholder="Chat here..." maxlength="35" />
-        </div>
-        <div id="mobile">
-           <input type="image" id="split" class="split" src="img/split.png" alt="splitBtn">
-           <input type="image" id="feed" class="feed" src="img/feed.png" alt="feedBtn">
-        </div>
-        <canvas tabindex="1" id="cvs"></canvas>
-    </div>
-    <div id="startMenuWrapper">
-        <div id="startMenu">
-            <p>Open Agar</p>
-            <input type="text" tabindex="0" autofocus placeholder="Enter your name here" id="playerNameInput" maxlength="25" />
-            <b class="input-error">Nick must be alphanumeric characters only!</b>
-            <br />
-            <a onclick="document.getElementById('spawn_cell').play();"><button id="startButton">Play</button></a>
-            <button id="spectateButton">Spectate</button>
-            <button id="settingsButton">Settings</button>
-            <br />
-            <div id="settings">
-                <h3>Settings</h3>
-                <ul>
-                    <label><input id="visBord" type="checkbox">Show border</label>
-                    <label><input id="showMass" type="checkbox">Show mass</label>
-                    <br />
-                    <label><input id="continuity" type="checkbox">Continue moving when mouse is off-screen</label>
-                    <br />
-                    <label><input id="roundFood" type="checkbox" checked>Rounded food</label>
-                    <label><input id="darkMode" type="checkbox">Toggle Dark Mode</label>
-                </ul>
+    <main class="viewport" id="landingView">
+        <section class="hero">
+            <h1 class="logo">Intersection</h1>
+            <p class="tagline">Harmony · Dimension · Universe</p>
+            <p class="intro">
+                스마트폰을 통해 빈 우주에 입장하고, 보이지 않는 중력 힌트를 따라 다른 행성과 교차하는 순간을 준비하세요.
+                지금은 프로토타입 초기 단계로, 기본 경험 뼈대를 정리하고 있습니다.
+            </p>
+        </section>
+        <section class="actions">
+            <input id="displayNameInput" class="name-input" type="text" placeholder="닉네임 (선택)" maxlength="20">
+            <button id="enterPersonal" class="primary">Personal View</button>
+            <button id="enterGlobal" class="secondary">Global Display</button>
+        </section>
+        <section class="status">
+            <h2>Current Focus</h2>
+            <ul>
+                <li>중력 힌트와 접촉 이벤트 프로토타입 설계</li>
+                <li>글로벌 뷰 시각 요소 리서치</li>
+                <li>실시간 동기화를 위한 서버 구조 조사</li>
+            </ul>
+        </section>
+    </main>
+    <div id="spaceView" class="space-view hidden">
+        <canvas id="spaceCanvas"></canvas>
+        <div class="hud">
+            <div class="hud-line">
+                <span class="hud-label">Mode</span>
+                <span id="modeLabel" class="hud-value">-</span>
             </div>
-            <div id="instructions">
-                <h3>Gameplay</h3>
-                <ul>
-                    <li>Move your mouse on the screen to move your character.</li>
-                    <li>Eat food and other players in order to grow your character (food respawns every time a player eats it).</li>
-                    <li>A player's mass is the number of food particles eaten.</li>
-                    <li>Objective: Try to get fat and eat other players.</li>
-                </ul>
+            <div class="hud-line">
+                <span class="hud-label">Identity</span>
+                <span id="nameLabel" class="hud-value">-</span>
             </div>
+            <div class="hud-line">
+                <span class="hud-label">Participants</span>
+                <span id="populationLabel" class="hud-value">0</span>
+            </div>
+            <button id="exitView" class="hud-exit">나가기</button>
         </div>
+        <div id="statusMessage" class="status-message">Connecting…</div>
     </div>
-    <!-- JS -->
-    <script src="//code.jquery.com/jquery-2.2.0.min.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

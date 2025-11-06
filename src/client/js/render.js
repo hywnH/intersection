@@ -8,37 +8,6 @@ const drawRoundObject = (position, radius, graph) => {
     graph.stroke();
 }
 
-const drawFood = (position, food, graph) => {
-    graph.fillStyle = 'hsl(' + food.hue + ', 100%, 50%)';
-    graph.strokeStyle = 'hsl(' + food.hue + ', 100%, 45%)';
-    graph.lineWidth = 0;
-    drawRoundObject(position, food.radius, graph);
-};
-
-const drawVirus = (position, virus, graph) => {
-    graph.strokeStyle = virus.stroke;
-    graph.fillStyle = virus.fill;
-    graph.lineWidth = virus.strokeWidth;
-    let theta = 0;
-    let sides = 20;
-
-    graph.beginPath();
-    for (let theta = 0; theta < FULL_ANGLE; theta += FULL_ANGLE / sides) {
-        let point = circlePoint(position, virus.radius, theta);
-        graph.lineTo(point.x, point.y);
-    }
-    graph.closePath();
-    graph.stroke();
-    graph.fill();
-};
-
-const drawFireFood = (position, mass, playerConfig, graph) => {
-    graph.strokeStyle = 'hsl(' + mass.hue + ', 100%, 45%)';
-    graph.fillStyle = 'hsl(' + mass.hue + ', 100%, 50%)';
-    graph.lineWidth = playerConfig.border + 2;
-    drawRoundObject(position, mass.radius - 1, graph);
-};
-
 const valueInRange = (min, max, value) => Math.min(max, Math.max(min, value))
 
 const circlePoint = (origo, radius, theta) => ({
@@ -153,9 +122,6 @@ const drawErrorMessage = (message, graph, screen) => {
 }
 
 module.exports = {
-    drawFood,
-    drawVirus,
-    drawFireFood,
     drawCells,
     drawErrorMessage,
     drawGrid,

@@ -1,285 +1,215 @@
 * {
-    font-family: sans-serif;
-    font-size: 14px;
+    box-sizing: border-box;
 }
 
-html, body {
-    background-color: #222;
-    overflow: hidden;
-}
-
-html, body, canvas {
-    width: 100%;
-    height: 100%;
+body {
     margin: 0;
-    padding: 0;
-    background: rgba(0, 0, 0, 0.4);
-
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: radial-gradient(circle at 20% 20%, #0d1b2a, #050914 60%, #01030a);
+    color: #e5ecff;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
 }
 
-div {
-    -webkit-user-select: none; /* webkit (safari, chrome) browsers */
-    -moz-user-select: none; /* mozilla browsers */
-    -khtml-user-select: none; /* webkit (konqueror) browsers */
-    -ms-user-select: none; /* IE10+ */
+.viewport {
+    width: min(680px, 92vw);
+    margin: 48px auto;
+    padding: 32px 28px 40px;
+    background: rgba(4, 10, 24, 0.85);
+    border: 1px solid rgba(102, 136, 255, 0.2);
+    border-radius: 24px;
+    box-shadow: 0 24px 60px rgba(7, 23, 66, 0.6);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
 }
 
-#split {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    width: 100px;
-    height: 100px;
-    padding: 5px;
-    border: none;
-}
-
-#feed {
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 100px;
-    height: 100px;
-    padding: 5px;
-    border: none;
-}
-
-#status {
-    position: absolute;
-    padding: 10px;
-    background: rgba(0, 0, 0, 0.4);
-    color: #FFF;
-    font-size: 16.1px;
-    top: 10px;
-    right: 10px;
-    font-weight: bold;
+.hero {
     text-align: center;
 }
 
-#status .title {
-    font-size: 25px;
+.logo {
+    font-size: clamp(2.5rem, 6vw, 3.4rem);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    margin: 0 0 8px;
 }
 
-#status .me {
-    color: #FF8888;
-    font-size: 16.1px;
-}
-
-.chatbox {
-    position: absolute;
-    width: 300px;
-    height: 320px;
-    background: rgba(22, 22, 22, 0.7);
-    bottom: 5px;
-    left: 5px;
-    border-radius: 5px;
-    pointer-events: none;
-}
-
-.chatbox .chat-list {
-    padding: 5px;
+.tagline {
     margin: 0;
-    list-style: none;
-    box-sizing: border-box;
-    height: 285px;
-    overflow: hidden;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.32em;
+    color: rgba(214, 223, 255, 0.65);
 }
 
-.chatbox .chat-list li {
-    padding: 2px;
-    margin: 3px;
+.intro {
+    margin-top: 24px;
+    line-height: 1.6;
+    color: rgba(214, 223, 255, 0.85);
 }
 
-.chatbox .chat-list li.me b {
-    color: #ea6153;
+.actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
 }
 
-.chatbox .chat-list li.friend b {
-    color: #2ecc71;
+.actions button {
+    padding: 14px 24px;
+    border-radius: 999px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
 
-.chatbox .chat-list li.system {
-    color: #9b59b6;
-    font-style: italic;
+.actions button:hover {
+    transform: translateY(-2px);
 }
 
-.chatbox .chat-list li.system:before {
-    content: "» ";
+.primary {
+    background: linear-gradient(120deg, #6c7bff, #a29bfe);
+    color: #0c1024;
+    box-shadow: 0 10px 30px rgba(108, 123, 255, 0.4);
 }
 
-.chatbox .chat-input {
-    pointer-events: all;
-    box-sizing: border-box;
-    width: 100%;
-    padding: 8px;
+.secondary {
     background: transparent;
-    border: none;
-    border-top: 1px solid #DDD;
+    border: 1px solid rgba(108, 123, 255, 0.45);
+    color: rgba(214, 223, 255, 0.9);
+}
+
+.name-input {
+    flex: 1 1 180px;
+    min-width: 160px;
+    padding: 12px 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(108, 123, 255, 0.35);
+    background: rgba(6, 14, 36, 0.6);
+    color: rgba(230, 235, 255, 0.9);
+    font-size: 0.95rem;
     outline: none;
+    transition: border 0.2s ease, background 0.2s ease;
 }
 
-#startMenu {
-    position: relative;
-    margin: auto;
-    margin-top: 100px;
-    width: 350px;
-    padding: 20px;
-    border-radius: 5px;
-    -moz-border-radius: 5px;
-    -webkit-border-radius: 5px;
-    background-color: white;
-    box-sizing: border-box;
+.name-input:focus {
+    border-color: rgba(162, 155, 254, 0.8);
+    background: rgba(10, 20, 52, 0.9);
 }
 
-#startMenu p {
-    padding: 0;
-    text-align: center;
-    font-size: x-large;
-    font-weight: bold;
+.status h2 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(214, 223, 255, 0.9);
 }
 
-#playerNameInput {
-    width: 100%;
-    text-align: center;
-    padding: 10px;
-    border: solid 1px #dcdcdc;
-    transition: box-shadow 0.3s, border 0.3s;
-    box-sizing: border-box;
-    border-radius: 5px;
-    -moz-border-radius: 5px;
-    -webkit-border-radius: 5px;
-    margin-bottom: 10px;
-    outline: none;
+.status ul {
+    margin: 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 10px;
+    color: rgba(214, 223, 255, 0.75);
 }
 
-#playerNameInput:focus, #playerNameInput.focus {
-    border: solid 1px #CCCCCC;
-    box-shadow: 0 0 3px 1px #DDDDDD;
+@media (max-width: 520px) {
+    .viewport {
+        padding: 28px 20px 36px;
+        gap: 28px;
+    }
+
+    .actions button {
+        flex: 1 1 100%;
+    }
+
+    .name-input {
+        flex: 1 1 100%;
+    }
 }
 
-#startButton, #spectateButton {
-    position: relative;
-    margin: auto;
-    margin-top: 10px;
-    width: 100%;
-    height: 40px;
-    box-sizing: border-box;
-    font-size: large;
-    color: white;
-    text-align: center;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-    background: #2ecc71;
-    border: 0;
-    border-bottom: 2px solid #28be68;
-    cursor: pointer;
-    -webkit-box-shadow: inset 0 -2px #28be68;
-    box-shadow: inset 0 -2px #28be68;
-    border-radius: 5px;
-    -moz-border-radius: 5px;
-    -webkit-border-radius: 5px;
-    margin-bottom: 10px;
+.hidden {
+    display: none !important;
 }
 
-#spectateButton:active, #spectateButton:hover,
-#startButton:active, #startButton:hover {
-    top: 1px;
-    background: #55D88B;
-    outline: none;
-    -webkit-box-shadow: none;
-    box-shadow: none;
-}
-
-#settingsButton {
-    position: relative;
-    margin: auto;
-    margin-top: 10px;
-    width: 100%;
-    height: 40px;
-    box-sizing: border-box;
-    font-size: large;
-    color: white;
-    text-align: center;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-    background: #2ecc71;
-    border: 0;
-    border-bottom: 2px solid #28be68;
-    cursor: pointer;
-    -webkit-box-shadow: inset 0 -2px #28be68;
-    box-shadow: inset 0 -2px #28be68;
-    border-radius: 5px;
-    -moz-border-radius: 5px;
-    -webkit-border-radius: 5px;
-    margin-bottom: 10px;
-}
-
-#settingsButton:active, #settingsButton:hover {
-    top: 1px;
-    background: #55D88B;
-    outline: none;
-    -webkit-box-shadow: none;
-    box-shadow: none;
-}
-
-#settings, #startMenuWrapper {
-    -webkit-transition: max-height 1s;
-    -moz-transition: max-height 1s;
-    -ms-transition: max-height 1s;
-    -o-transition: max-height 1s;
-    transition: max-height 1s;
+.space-view {
+    position: fixed;
+    inset: 0;
+    background: #01030a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     overflow: hidden;
 }
 
-#settings {
-    max-height: 0;
+.space-view canvas {
+    width: 100vw;
+    height: 100vh;
+    display: block;
 }
 
-#startMenu h3 {
-    padding-bottom: 0;
-    margin-bottom: 0;
+.hud {
+    position: fixed;
+    top: 24px;
+    left: 24px;
+    padding: 18px 20px;
+    background: rgba(5, 12, 28, 0.78);
+    border: 1px solid rgba(118, 139, 255, 0.25);
+    border-radius: 14px;
+    color: rgba(222, 230, 255, 0.9);
+    display: grid;
+    gap: 10px;
+    min-width: 180px;
+    backdrop-filter: blur(6px);
 }
 
-#startMenu ul {
-    margin: 10px;
-    padding: 10px;
-    margin-top: 0;
+.hud-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
 }
 
-#startMenu .input-error {
-    color: red;
-    opacity: 0;
-    font-size : 12px;
+.hud-label {
+    color: rgba(150, 173, 255, 0.7);
 }
 
-#startMenuWrapper {
-    z-index: 2;
+.hud-value {
+    font-weight: 600;
 }
 
-#gameAreaWrapper {
-    position: absolute !important;
-    top: 0;
-    left: 0;
-    opacity: 0;
+.hud-exit {
+    margin-top: 4px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #091232;
+    background: rgba(173, 191, 255, 0.85);
+    cursor: pointer;
+    transition: background 0.2s ease;
 }
 
-@media only screen  and (min-width : 1224px) {
-#mobile {
-display: none;
-	}
+.hud-exit:hover {
+    background: rgba(173, 191, 255, 1);
 }
 
-@media only screen  and (max-width : 1224px) {
-#chatbox {
-display: none;
-        }
-}
-
-input [type="image"]:focus{
- border:none;
- outline: 1px solid transparent;
- border-style: none;
-}
-
-*:focus {
- outline: 1px solid transparent;
- border-style: none;
+.status-message {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 16px;
+    background: rgba(5, 12, 28, 0.8);
+    border-radius: 999px;
+    color: rgba(220, 228, 255, 0.85);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    border: 1px solid rgba(118, 139, 255, 0.25);
 }
