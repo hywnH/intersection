@@ -22,7 +22,8 @@ const state = {
     camera: { x: 0, y: 0 },
     heartbeatId: null,
     cellTrails: [],
-    collisionPairs: new Map() // Stores collision pairs: "userId1:cellIndex1-userId2:cellIndex2" -> { user1, cellIndex1, user2, cellIndex2 }
+    collisionPairs: new Map(), // Stores collision pairs: "userId1:cellIndex1-userId2:cellIndex2" -> { user1, cellIndex1, user2, cellIndex2 }
+    collisionMarks: [] // Stores collision marks: { x, y, timestamp, radius }
 };
 
 let canvas;
@@ -121,6 +122,7 @@ function teardownSocket() {
     state.users = [];
     state.cellTrails = [];
     state.collisionPairs.clear();
+    state.collisionMarks = [];
 }
 
 function updateHud() {
@@ -477,6 +479,20 @@ function getCollisionPairKey(userId1, cellIndex1, userId2, cellIndex2) {
     return `${id1}:${idx1}-${id2}:${idx2}`;
 }
 
+function addCollisionMark(x, y, radius) {
+    // Only add marks in global view
+    if (state.mode !== 'global') return;
+    
+    // Calculate mark position (midpoint between colliding cells)
+    const mark = {
+        x: x,
+        y: y,
+        timestamp: Date.now(),
+        radius: Math.max(radius, 20) // Minimum radius for visibility
+    };
+    state.collisionMarks.push(mark);
+}
+
 function detectCollisionGlow(playerCells) {
     const glowIndexes = new Set();
     const hasPlayerCells = Array.isArray(playerCells) && playerCells.length > 0;
@@ -500,6 +516,11 @@ function detectCollisionGlow(playerCells) {
                                 userId2: user.id,
                                 cellIndex2: otherCellIndex
                             });
+                            // Add collision mark at midpoint
+                            const midX = (cell.x + otherCell.x) / 2;
+                            const midY = (cell.y + otherCell.y) / 2;
+                            const avgRadius = (cell.radius + otherCell.radius) / 2;
+                            addCollisionMark(midX, midY, avgRadius);
                         }
                     }
                 });
@@ -532,6 +553,11 @@ function detectCollisionGlow(playerCells) {
                                 userId2: user2.id,
                                 cellIndex2: cellIndex2
                             });
+                            // Add collision mark at midpoint
+                            const midX = (cell1.x + cell2.x) / 2;
+                            const midY = (cell1.y + cell2.y) / 2;
+                            const avgRadius = (cell1.radius + cell2.radius) / 2;
+                            addCollisionMark(midX, midY, avgRadius);
                         }
                     }
                 });
@@ -627,6 +653,86 @@ function drawPlayerCell(x, y, radius) {
     ctx.restore();
 }
 
+function updateCollisionMarks() {
+    const now = Date.now();
+    const MARK_LIFETIME = 5000; // 5 seconds total lifetime
+    const FADE_START = 3000; // Start fading after 3 seconds
+    
+    // Remove expired marks and update alpha
+    state.collisionMarks = state.collisionMarks.filter((mark) => {
+        const age = now - mark.timestamp;
+        if (age >= MARK_LIFETIME) {
+            return false; // Remove expired marks
+        }
+        return true;
+    });
+}
+
+function drawCollisionMarks() {
+    if (state.mode !== 'global' || state.collisionMarks.length === 0) return;
+    
+    const scale = Math.min(
+        canvas.width / state.game.width,
+        canvas.height / state.game.height
+    );
+    const offsetX = (canvas.width - state.game.width * scale) / 2;
+    const offsetY = (canvas.height - state.game.height * scale) / 2;
+    
+    const now = Date.now();
+    const MARK_LIFETIME = 5000; // 5 seconds total lifetime
+    const FADE_START = 3000; // Start fading after 3 seconds
+    
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    
+    state.collisionMarks.forEach((mark) => {
+        const age = now - mark.timestamp;
+        if (age >= MARK_LIFETIME) return;
+        
+        // Calculate alpha based on age
+        let alpha = 1.0;
+        if (age > FADE_START) {
+            // Fade out from FADE_START to MARK_LIFETIME
+            const fadeProgress = (age - FADE_START) / (MARK_LIFETIME - FADE_START);
+            alpha = 1.0 - fadeProgress;
+        }
+        
+        const screenX = offsetX + mark.x * scale;
+        const screenY = offsetY + mark.y * scale;
+        const screenRadius = mark.radius * scale;
+        
+        // Draw glow effect similar to collision glow
+        const outerRadius = screenRadius * 2.5;
+        const gradient = ctx.createRadialGradient(
+            screenX, screenY, screenRadius * 0.3,
+            screenX, screenY, outerRadius
+        );
+        gradient.addColorStop(0, `rgba(255, 220, 120, ${0.8 * alpha})`);
+        gradient.addColorStop(0.5, `rgba(255, 200, 100, ${0.4 * alpha})`);
+        gradient.addColorStop(1, `rgba(255, 180, 80, ${0.0 * alpha})`);
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, outerRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw inner bright core
+        const coreGradient = ctx.createRadialGradient(
+            screenX, screenY, 0,
+            screenX, screenY, screenRadius * 0.6
+        );
+        coreGradient.addColorStop(0, `rgba(255, 255, 255, ${0.9 * alpha})`);
+        coreGradient.addColorStop(1, `rgba(255, 220, 120, ${0.3 * alpha})`);
+        
+        ctx.fillStyle = coreGradient;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, screenRadius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    ctx.restore();
+}
+
 function drawGlobalView() {
     const scale = Math.min(
         canvas.width / state.game.width,
@@ -642,7 +748,11 @@ function drawGlobalView() {
     // Update collision pairs for global view (detect collisions between all users)
     detectCollisionGlow(state.player && state.player.cells ? state.player.cells : []);
 
-    // Draw collision lines first (behind balls)
+    // Update and draw collision marks (behind everything)
+    updateCollisionMarks();
+    drawCollisionMarks();
+
+    // Draw collision lines (behind balls)
     drawCollisionLines();
 
     ctx.fillStyle = COLORS.other;
