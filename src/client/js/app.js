@@ -23,7 +23,8 @@ const state = {
     heartbeatId: null,
     cellTrails: [],
     collisionPairs: new Map(), // Stores collision pairs: "userId1:cellIndex1-userId2:cellIndex2" -> { user1, cellIndex1, user2, cellIndex2 }
-    collisionMarks: [] // Stores collision marks: { x, y, timestamp, radius }
+    collisionMarks: [], // Stores collision marks: { x, y, timestamp, radius }
+    lastCollisionMarkTimes: new Map() // Stores last collision mark time for each pair to avoid spam
 };
 
 let canvas;
@@ -123,6 +124,7 @@ function teardownSocket() {
     state.cellTrails = [];
     state.collisionPairs.clear();
     state.collisionMarks = [];
+    state.lastCollisionMarkTimes.clear();
 }
 
 function updateHud() {
@@ -479,15 +481,27 @@ function getCollisionPairKey(userId1, cellIndex1, userId2, cellIndex2) {
     return `${id1}:${idx1}-${id2}:${idx2}`;
 }
 
-function addCollisionMark(x, y, radius) {
+function addCollisionMark(x, y, radius, pairKey) {
     // Only add marks in global view
     if (state.mode !== 'global') return;
+    
+    const now = Date.now();
+    const MIN_MARK_INTERVAL = 300; // Minimum 300ms between marks for the same pair
+    
+    // Check if we recently added a mark for this pair
+    if (pairKey) {
+        const lastTime = state.lastCollisionMarkTimes.get(pairKey);
+        if (lastTime && (now - lastTime) < MIN_MARK_INTERVAL) {
+            return; // Skip if too soon
+        }
+        state.lastCollisionMarkTimes.set(pairKey, now);
+    }
     
     // Calculate mark position (midpoint between colliding cells)
     const mark = {
         x: x,
         y: y,
-        timestamp: Date.now(),
+        timestamp: now,
         radius: Math.max(radius, 20) // Minimum radius for visibility
     };
     state.collisionMarks.push(mark);
@@ -507,7 +521,7 @@ function detectCollisionGlow(playerCells) {
                     const distance = Math.hypot(otherCell.x - cell.x, otherCell.y - cell.y);
                     if (distance <= (otherCell.radius + cell.radius)) {
                         glowIndexes.add(index);
-                        // Record collision pair
+                        // Record collision pair (for line drawing)
                         const pairKey = getCollisionPairKey(state.playerId, index, user.id, otherCellIndex);
                         if (!state.collisionPairs.has(pairKey)) {
                             state.collisionPairs.set(pairKey, {
@@ -516,12 +530,12 @@ function detectCollisionGlow(playerCells) {
                                 userId2: user.id,
                                 cellIndex2: otherCellIndex
                             });
-                            // Add collision mark at midpoint
-                            const midX = (cell.x + otherCell.x) / 2;
-                            const midY = (cell.y + otherCell.y) / 2;
-                            const avgRadius = (cell.radius + otherCell.radius) / 2;
-                            addCollisionMark(midX, midY, avgRadius);
                         }
+                        // Add collision mark at midpoint (always, even if pair already exists)
+                        const midX = (cell.x + otherCell.x) / 2;
+                        const midY = (cell.y + otherCell.y) / 2;
+                        const avgRadius = (cell.radius + otherCell.radius) / 2;
+                        addCollisionMark(midX, midY, avgRadius, pairKey);
                     }
                 });
             });
@@ -545,6 +559,7 @@ function detectCollisionGlow(playerCells) {
                     if (!cell2) return;
                     const distance = Math.hypot(cell2.x - cell1.x, cell2.y - cell1.y);
                     if (distance <= (cell1.radius + cell2.radius)) {
+                        // Record collision pair (for line drawing)
                         const pairKey = getCollisionPairKey(user1.id, cellIndex1, user2.id, cellIndex2);
                         if (!state.collisionPairs.has(pairKey)) {
                             state.collisionPairs.set(pairKey, {
@@ -553,12 +568,12 @@ function detectCollisionGlow(playerCells) {
                                 userId2: user2.id,
                                 cellIndex2: cellIndex2
                             });
-                            // Add collision mark at midpoint
-                            const midX = (cell1.x + cell2.x) / 2;
-                            const midY = (cell1.y + cell2.y) / 2;
-                            const avgRadius = (cell1.radius + cell2.radius) / 2;
-                            addCollisionMark(midX, midY, avgRadius);
                         }
+                        // Add collision mark at midpoint (always, even if pair already exists)
+                        const midX = (cell1.x + cell2.x) / 2;
+                        const midY = (cell1.y + cell2.y) / 2;
+                        const avgRadius = (cell1.radius + cell2.radius) / 2;
+                        addCollisionMark(midX, midY, avgRadius, pairKey);
                     }
                 });
             });
@@ -655,8 +670,8 @@ function drawPlayerCell(x, y, radius) {
 
 function updateCollisionMarks() {
     const now = Date.now();
-    const MARK_LIFETIME = 5000; // 5 seconds total lifetime
-    const FADE_START = 3000; // Start fading after 3 seconds
+    const MARK_LIFETIME = 15000; // 15 seconds total lifetime
+    const FADE_START = 10000; // Start fading after 10 seconds
     
     // Remove expired marks and update alpha
     state.collisionMarks = state.collisionMarks.filter((mark) => {
@@ -679,8 +694,8 @@ function drawCollisionMarks() {
     const offsetY = (canvas.height - state.game.height * scale) / 2;
     
     const now = Date.now();
-    const MARK_LIFETIME = 5000; // 5 seconds total lifetime
-    const FADE_START = 3000; // Start fading after 3 seconds
+    const MARK_LIFETIME = 15000; // 15 seconds total lifetime
+    const FADE_START = 10000; // Start fading after 10 seconds
     
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
