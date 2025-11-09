@@ -21,7 +21,8 @@ const state = {
     game: { width: 5000, height: 5000 },
     camera: { x: 0, y: 0 },
     heartbeatId: null,
-    cellTrails: []
+    cellTrails: [],
+    collisionPairs: new Map() // Stores collision pairs: "userId1:cellIndex1-userId2:cellIndex2" -> { user1, cellIndex1, user2, cellIndex2 }
 };
 
 let canvas;
@@ -119,6 +120,7 @@ function teardownSocket() {
     state.playerId = null;
     state.users = [];
     state.cellTrails = [];
+    state.collisionPairs.clear();
 }
 
 function updateHud() {
@@ -179,6 +181,19 @@ function connectSocket() {
             width: Number(gameSizes.width) || state.game.width,
             height: Number(gameSizes.height) || state.game.height
         };
+        const newPlayerId = playerSettings.id || socket.id;
+        
+        // Clear collision pairs involving the player (player respawned with new cells)
+        if (state.playerId) {
+            const keysToRemove = [];
+            state.collisionPairs.forEach((pair, key) => {
+                if (pair.userId1 === state.playerId || pair.userId2 === state.playerId) {
+                    keysToRemove.push(key);
+                }
+            });
+            keysToRemove.forEach(key => state.collisionPairs.delete(key));
+        }
+        
         state.player = Object.assign({}, playerSettings);
         if (typeof state.player.x !== 'number') {
             state.player.x = state.game.width / 2;
@@ -187,7 +202,7 @@ function connectSocket() {
             state.player.y = state.game.height / 2;
         }
         state.player.cells = Array.isArray(state.player.cells) ? state.player.cells : [];
-        state.playerId = playerSettings.id || state.playerId || socket.id;
+        state.playerId = newPlayerId;
         state.camera = {
             x: playerSettings.x || state.game.width / 2,
             y: playerSettings.y || state.game.height / 2
@@ -312,6 +327,116 @@ function drawFrame() {
     }
 }
 
+function cleanupCollisionPairs() {
+    // Remove pairs where users or cells no longer exist
+    const validUserIds = new Set(state.users.map(u => u && u.id).filter(Boolean));
+    if (state.playerId) {
+        validUserIds.add(state.playerId);
+    }
+
+    const keysToRemove = [];
+    state.collisionPairs.forEach((pair, key) => {
+        const user1Valid = validUserIds.has(pair.userId1);
+        const user2Valid = validUserIds.has(pair.userId2);
+        
+        if (!user1Valid || !user2Valid) {
+            keysToRemove.push(key);
+            return;
+        }
+
+        // Check if cells still exist
+        let cell1Exists = false;
+        let cell2Exists = false;
+
+        if (pair.userId1 === state.playerId && state.player && state.player.cells) {
+            cell1Exists = pair.cellIndex1 < state.player.cells.length && state.player.cells[pair.cellIndex1];
+        } else {
+            const user1 = state.users.find(u => u && u.id === pair.userId1);
+            if (user1 && user1.cells) {
+                cell1Exists = pair.cellIndex1 < user1.cells.length && user1.cells[pair.cellIndex1];
+            }
+        }
+
+        if (pair.userId2 === state.playerId && state.player && state.player.cells) {
+            cell2Exists = pair.cellIndex2 < state.player.cells.length && state.player.cells[pair.cellIndex2];
+        } else {
+            const user2 = state.users.find(u => u && u.id === pair.userId2);
+            if (user2 && user2.cells) {
+                cell2Exists = pair.cellIndex2 < user2.cells.length && user2.cells[pair.cellIndex2];
+            }
+        }
+
+        if (!cell1Exists || !cell2Exists) {
+            keysToRemove.push(key);
+        }
+    });
+
+    keysToRemove.forEach(key => state.collisionPairs.delete(key));
+}
+
+function getCellPosition(userId, cellIndex) {
+    if (userId === state.playerId && state.player && state.player.cells) {
+        const cell = state.player.cells[cellIndex];
+        if (cell) {
+            return { x: cell.x, y: cell.y, radius: cell.radius };
+        }
+    } else {
+        const user = state.users.find(u => u && u.id === userId);
+        if (user && user.cells && user.cells[cellIndex]) {
+            const cell = user.cells[cellIndex];
+            return { x: cell.x, y: cell.y, radius: cell.radius };
+        }
+    }
+    return null;
+}
+
+function drawCollisionLines() {
+    cleanupCollisionPairs();
+
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.6;
+
+    state.collisionPairs.forEach((pair) => {
+        const cell1 = getCellPosition(pair.userId1, pair.cellIndex1);
+        const cell2 = getCellPosition(pair.userId2, pair.cellIndex2);
+
+        if (!cell1 || !cell2) return;
+
+        let x1, y1, x2, y2;
+
+        if (state.mode === 'personal') {
+            // Personal view: convert world coordinates to screen coordinates
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            x1 = centerX + (cell1.x - state.player.x);
+            y1 = centerY + (cell1.y - state.player.y);
+            x2 = centerX + (cell2.x - state.player.x);
+            y2 = centerY + (cell2.y - state.player.y);
+        } else {
+            // Global view: scale to canvas
+            const scale = Math.min(
+                canvas.width / state.game.width,
+                canvas.height / state.game.height
+            );
+            const offsetX = (canvas.width - state.game.width * scale) / 2;
+            const offsetY = (canvas.height - state.game.height * scale) / 2;
+            x1 = offsetX + cell1.x * scale;
+            y1 = offsetY + cell1.y * scale;
+            x2 = offsetX + cell2.x * scale;
+            y2 = offsetY + cell2.y * scale;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+    });
+
+    ctx.restore();
+}
+
 function drawPersonalView() {
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
@@ -319,6 +444,9 @@ function drawPersonalView() {
 
     recordCellTrails(playerCells);
     const glowTargets = detectCollisionGlow(playerCells);
+
+    // Draw collision lines first (behind balls)
+    drawCollisionLines();
 
     if (playerCells.length === 0) {
         ctx.fillStyle = COLORS.self;
@@ -341,22 +469,75 @@ function drawPersonalView() {
     });
 }
 
+function getCollisionPairKey(userId1, cellIndex1, userId2, cellIndex2) {
+    // Normalize pair key so A-B and B-A are treated the same
+    const [id1, idx1, id2, idx2] = userId1 < userId2 || (userId1 === userId2 && cellIndex1 < cellIndex2)
+        ? [userId1, cellIndex1, userId2, cellIndex2]
+        : [userId2, cellIndex2, userId1, cellIndex1];
+    return `${id1}:${idx1}-${id2}:${idx2}`;
+}
+
 function detectCollisionGlow(playerCells) {
     const glowIndexes = new Set();
-    if (!Array.isArray(playerCells) || playerCells.length === 0) return glowIndexes;
+    const hasPlayerCells = Array.isArray(playerCells) && playerCells.length > 0;
 
-    state.users.forEach((user) => {
-        if (!user || user.id === state.playerId || !Array.isArray(user.cells)) return;
-        user.cells.forEach((otherCell) => {
-            playerCells.forEach((cell, index) => {
-                if (!cell) return;
-                const distance = Math.hypot(otherCell.x - cell.x, otherCell.y - cell.y);
-                if (distance <= (otherCell.radius + cell.radius)) {
-                    glowIndexes.add(index);
-                }
+    // Check collisions between player cells and other users' cells
+    if (hasPlayerCells && state.playerId) {
+        state.users.forEach((user) => {
+            if (!user || user.id === state.playerId || !Array.isArray(user.cells)) return;
+            user.cells.forEach((otherCell, otherCellIndex) => {
+                playerCells.forEach((cell, index) => {
+                    if (!cell) return;
+                    const distance = Math.hypot(otherCell.x - cell.x, otherCell.y - cell.y);
+                    if (distance <= (otherCell.radius + cell.radius)) {
+                        glowIndexes.add(index);
+                        // Record collision pair
+                        const pairKey = getCollisionPairKey(state.playerId, index, user.id, otherCellIndex);
+                        if (!state.collisionPairs.has(pairKey)) {
+                            state.collisionPairs.set(pairKey, {
+                                userId1: state.playerId,
+                                cellIndex1: index,
+                                userId2: user.id,
+                                cellIndex2: otherCellIndex
+                            });
+                        }
+                    }
+                });
             });
         });
-    });
+    }
+
+    // Check collisions between all users' cells (including player if not in personal mode)
+    const allUsers = state.playerId && state.player && state.player.cells 
+        ? [{ id: state.playerId, cells: state.player.cells }, ...state.users]
+        : state.users;
+    
+    for (let i = 0; i < allUsers.length; i++) {
+        const user1 = allUsers[i];
+        if (!user1 || !Array.isArray(user1.cells)) continue;
+        for (let j = i + 1; j < allUsers.length; j++) {
+            const user2 = allUsers[j];
+            if (!user2 || !Array.isArray(user2.cells)) continue;
+            user1.cells.forEach((cell1, cellIndex1) => {
+                if (!cell1) return;
+                user2.cells.forEach((cell2, cellIndex2) => {
+                    if (!cell2) return;
+                    const distance = Math.hypot(cell2.x - cell1.x, cell2.y - cell1.y);
+                    if (distance <= (cell1.radius + cell2.radius)) {
+                        const pairKey = getCollisionPairKey(user1.id, cellIndex1, user2.id, cellIndex2);
+                        if (!state.collisionPairs.has(pairKey)) {
+                            state.collisionPairs.set(pairKey, {
+                                userId1: user1.id,
+                                cellIndex1: cellIndex1,
+                                userId2: user2.id,
+                                cellIndex2: cellIndex2
+                            });
+                        }
+                    }
+                });
+            });
+        }
+    }
 
     return glowIndexes;
 }
@@ -457,6 +638,12 @@ function drawGlobalView() {
     ctx.strokeStyle = COLORS.otherStrong;
     ctx.lineWidth = 1;
     ctx.strokeRect(offsetX, offsetY, state.game.width * scale, state.game.height * scale);
+
+    // Update collision pairs for global view (detect collisions between all users)
+    detectCollisionGlow(state.player && state.player.cells ? state.player.cells : []);
+
+    // Draw collision lines first (behind balls)
+    drawCollisionLines();
 
     ctx.fillStyle = COLORS.other;
     state.users.forEach((user) => {
