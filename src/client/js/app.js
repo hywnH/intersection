@@ -465,7 +465,7 @@ function drawPersonalView() {
         const screenX = centerX + (cell.x - state.player.x);
         const screenY = centerY + (cell.y - state.player.y);
 
-        drawCellTrail(radius, index, centerX, centerY);
+        drawCellTrail(radius, index, centerX, centerY, screenX, screenY);
         if (glowTargets.has(index)) {
             drawCollisionGlow(screenX, screenY, radius);
         }
@@ -596,46 +596,246 @@ function recordCellTrails(playerCells) {
         state.cellTrails.length = playerCells.length;
     }
 
+    const now = Date.now();
+
     playerCells.forEach((cell, index) => {
         let trail = state.cellTrails[index];
         if (!trail) {
             trail = [];
             state.cellTrails[index] = trail;
         }
+        
         const last = trail[trail.length - 1];
-        const moved = !last || Math.hypot(cell.x - last.x, cell.y - last.y) > 1;
+        const moved = !last || Math.hypot(cell.x - last.x, cell.y - last.y) > 0.5;
+        
         if (moved) {
-            trail.push({ x: cell.x, y: cell.y });
-            if (trail.length > 15) {
+            // Calculate velocity from previous position
+            let velocity = 0;
+            let direction = 0;
+            if (last) {
+                const dx = cell.x - last.x;
+                const dy = cell.y - last.y;
+                velocity = Math.hypot(dx, dy);
+                direction = Math.atan2(dy, dx);
+            }
+            
+            trail.push({ 
+                x: cell.x, 
+                y: cell.y, 
+                timestamp: now,
+                velocity: velocity,
+                direction: direction
+            });
+            
+            // Keep more trail points for smoother motion blur
+            if (trail.length > 40) {
                 trail.shift();
             }
-        } else if (trail.length > 4) {
-            trail.shift();
+        } else {
+            // If not moved, still update timestamp but keep position
+            if (last) {
+                last.timestamp = now;
+            }
+            // Remove old stationary trails
+            if (trail.length > 4) {
+                trail.shift();
+            }
         }
     });
 }
 
-function drawCellTrail(radius, trailIndex, centerX, centerY) {
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function drawCellTrail(radius, trailIndex, centerX, centerY, currentScreenX, currentScreenY) {
     const trail = state.cellTrails[trailIndex];
     if (!trail || trail.length < 2) return;
 
+    const now = Date.now();
+    const MAX_TRAIL_AGE = 800; // 0.8 second max age for trail points
+    
     ctx.save();
     ctx.lineCap = 'round';
-    for (let i = trail.length - 1; i > 0; i--) {
-        const current = trail[i];
-        const previous = trail[i - 1];
-        const startX = centerX + (current.x - state.player.x);
-        const startY = centerY + (current.y - state.player.y);
-        const endX = centerX + (previous.x - state.player.x);
-        const endY = centerY + (previous.y - state.player.y);
-        const strength = i / trail.length;
-        ctx.strokeStyle = `rgba(120, 180, 255, ${0.15 + strength * 0.35})`;
-        ctx.lineWidth = Math.max(radius * 0.25 * strength, 1.5);
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
+    ctx.lineJoin = 'round';
+    
+    // Calculate screen positions for all trail points
+    const screenPoints = trail.map((point, i) => {
+        const age = now - (point.timestamp || now);
+        const ageRatio = Math.min(age / MAX_TRAIL_AGE, 1);
+        const screenX = centerX + (point.x - state.player.x);
+        const screenY = centerY + (point.y - state.player.y);
+        return {
+            x: screenX,
+            y: screenY,
+            age: age,
+            ageRatio: ageRatio,
+            velocity: point.velocity || 0,
+            direction: point.direction || 0
+        };
+    });
+    
+    // Calculate movement direction from trail for arrow placement
+    let movementDirection = null;
+    let movementSpeed = 0;
+    if (screenPoints.length >= 2) {
+        const recent = screenPoints[screenPoints.length - 1];
+        const older = screenPoints[Math.max(0, screenPoints.length - 3)];
+        const dx = recent.x - older.x;
+        const dy = recent.y - older.y;
+        movementSpeed = Math.hypot(dx, dy);
+        if (movementSpeed > 0.5) {
+            movementDirection = Math.atan2(dy, dx);
+        }
     }
+    
+    // Draw motion blur trail with gradient
+    if (screenPoints.length >= 2) {
+        // Extend trail to current position for smoother connection
+        const extendedPoints = [...screenPoints];
+        if (movementDirection !== null && movementSpeed > 0.5) {
+            // Add interpolated point near current position
+            const lastPoint = screenPoints[screenPoints.length - 1];
+            const lerpAmount = 0.3;
+            extendedPoints.push({
+                x: lerp(lastPoint.x, currentScreenX, lerpAmount),
+                y: lerp(lastPoint.y, currentScreenY, lerpAmount),
+                age: 0,
+                ageRatio: 0,
+                velocity: movementSpeed,
+                direction: movementDirection
+            });
+        }
+        
+        // Draw smooth curved trail
+        ctx.beginPath();
+        ctx.moveTo(extendedPoints[0].x, extendedPoints[0].y);
+        
+        // Use quadratic curves for smoother motion
+        for (let i = 1; i < extendedPoints.length; i++) {
+            const prev = extendedPoints[i - 1];
+            const curr = extendedPoints[i];
+            const next = extendedPoints[i + 1];
+            
+            if (next) {
+                // Use control point for smooth curve
+                const cpX = lerp(prev.x, curr.x, 0.6);
+                const cpY = lerp(prev.y, curr.y, 0.6);
+                ctx.quadraticCurveTo(cpX, cpY, curr.x, curr.y);
+            } else {
+                ctx.lineTo(curr.x, curr.y);
+            }
+        }
+        
+        // Create gradient for motion blur effect (from old to recent)
+        const startPoint = extendedPoints[0];
+        const endPoint = extendedPoints[extendedPoints.length - 1];
+        const gradient = ctx.createLinearGradient(
+            startPoint.x,
+            startPoint.y,
+            endPoint.x,
+            endPoint.y
+        );
+        
+        // Gradient from faded (old) to bright (recent)
+        gradient.addColorStop(0, 'rgba(80, 140, 255, 0.0)'); // Faded at start
+        gradient.addColorStop(0.2, 'rgba(100, 160, 255, 0.15)');
+        gradient.addColorStop(0.5, 'rgba(120, 180, 255, 0.4)');
+        gradient.addColorStop(0.8, 'rgba(150, 200, 255, 0.7)'); // Bright blue at end
+        gradient.addColorStop(1, 'rgba(170, 210, 255, 0.85)'); // Brightest at very end
+        
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = radius * 0.5;
+        ctx.stroke();
+        
+        // Draw additional glow layer for motion blur
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.beginPath();
+        ctx.moveTo(extendedPoints[0].x, extendedPoints[0].y);
+        for (let i = 1; i < extendedPoints.length; i++) {
+            const prev = extendedPoints[i - 1];
+            const curr = extendedPoints[i];
+            const next = extendedPoints[i + 1];
+            
+            if (next) {
+                const cpX = lerp(prev.x, curr.x, 0.6);
+                const cpY = lerp(prev.y, curr.y, 0.6);
+                ctx.quadraticCurveTo(cpX, cpY, curr.x, curr.y);
+            } else {
+                ctx.lineTo(curr.x, curr.y);
+            }
+        }
+        
+        const glowGradient = ctx.createLinearGradient(
+            startPoint.x,
+            startPoint.y,
+            endPoint.x,
+            endPoint.y
+        );
+        glowGradient.addColorStop(0, 'rgba(100, 140, 255, 0.0)');
+        glowGradient.addColorStop(0.3, 'rgba(120, 160, 255, 0.1)');
+        glowGradient.addColorStop(0.6, 'rgba(150, 180, 255, 0.2)');
+        glowGradient.addColorStop(1, 'rgba(200, 220, 255, 0.35)');
+        
+        ctx.strokeStyle = glowGradient;
+        ctx.lineWidth = radius * 0.9;
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+    }
+    
+    // Draw direction indicator arrow behind the ball (only when moving)
+    if (movementDirection !== null && movementSpeed > 1) {
+        // Calculate arrow position (behind the ball, opposite to movement direction)
+        // Arrow should point in the movement direction, so place it behind (opposite side)
+        const arrowDistance = radius * 1.3;
+        const arrowX = currentScreenX - Math.cos(movementDirection) * arrowDistance;
+        const arrowY = currentScreenY - Math.sin(movementDirection) * arrowDistance;
+        
+        // Arrow size based on movement speed
+        const arrowLength = Math.min(radius * 0.9, Math.max(radius * 0.5, movementSpeed * 0.25));
+        const arrowWidth = Math.max(radius * 0.18, Math.min(radius * 0.25, movementSpeed * 0.05));
+        
+        // Draw direction arrow (pointing in movement direction)
+        ctx.save();
+        ctx.translate(arrowX, arrowY);
+        ctx.rotate(movementDirection); // Point in movement direction
+        
+        // Arrow body with gradient (from tail to head)
+        const arrowBodyGradient = ctx.createLinearGradient(-arrowLength * 0.7, 0, 0, 0);
+        arrowBodyGradient.addColorStop(0, 'rgba(150, 200, 255, 0.6)');
+        arrowBodyGradient.addColorStop(1, 'rgba(200, 230, 255, 0.95)');
+        
+        ctx.beginPath();
+        ctx.moveTo(-arrowLength * 0.7, 0);
+        ctx.lineTo(0, 0);
+        ctx.strokeStyle = arrowBodyGradient;
+        ctx.lineWidth = arrowWidth * 1.3;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        
+        // Arrow head with glow effect
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-arrowLength * 0.4, -arrowWidth * 2.0);
+        ctx.lineTo(-arrowLength * 0.4, arrowWidth * 2.0);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(220, 240, 255, 0.85)';
+        ctx.fill();
+        
+        // Inner arrow head for better definition
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-arrowLength * 0.35, -arrowWidth * 1.4);
+        ctx.lineTo(-arrowLength * 0.35, arrowWidth * 1.4);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(180, 220, 255, 0.95)';
+        ctx.fill();
+        
+        ctx.restore();
+    }
+    
     ctx.restore();
 }
 
