@@ -91,6 +91,7 @@ exports.Player = class {
         this.screenWidth = null;
         this.screenHeight = null;
         this.timeToMerge = null;
+        this.trackedUserIds = new Set(); // User IDs that this player wants to track (for collision pairs)
         this.setLastHeartbeat();
     }
 
@@ -104,6 +105,8 @@ exports.Player = class {
             x: 0,
             y: 0
         };
+        // Reset tracked users on respawn (old collision pairs are no longer valid)
+        this.trackedUserIds = new Set();
     }
 
     clientProvidedData(playerData) {

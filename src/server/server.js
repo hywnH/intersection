@@ -189,6 +189,13 @@ const addPlayer = (socket) => {
         }
     });
 
+    // Handle collision pairs tracking from client
+    socket.on('trackCollisionPairs', (trackedUserIds) => {
+        if (Array.isArray(trackedUserIds)) {
+            currentPlayer.trackedUserIds = new Set(trackedUserIds);
+        }
+    });
+
     socket.on('2', () => {
         currentPlayer.userSplit(config.limitSplit, config.defaultPlayerMass);
     });
